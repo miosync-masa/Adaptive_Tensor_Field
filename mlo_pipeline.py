@@ -289,6 +289,20 @@ class Lambda3DataPreprocessor:
             
             # 学習パイプラインに送信
             self.send_to_training_pipeline(final_features)
+
+    def get_batch_from_queue(self) -> Dict:
+        """Queueからバッチを取得するプレースホルダー"""
+        return {}
+
+    def build_final_features(self, integrated_features: Dict, causality_features: Dict) -> Dict:
+        """最終的な特徴量を構築するプレースホルダー"""
+        final = dict(integrated_features)
+        final.update(causality_features)
+        return final
+
+    def send_to_training_pipeline(self, final_features: Dict):
+        """学習パイプラインへの送信プレースホルダー"""
+        pass
     
     def integrate_lambda3_features(self, batch_features: Dict) -> Dict:
         """複数系列のLambda³特徴量を統合"""
@@ -606,7 +620,7 @@ class IntelligentDeployment:
         
         self.k8s_apps = client.AppsV1Api()
     
-   async def deploy_with_uncertainty(self, model_trace, confidence_threshold=0.95):
+    async def deploy_with_uncertainty(self, model_trace, confidence_threshold=0.95):
         """不確実性を考慮したデプロイメント（安全ロールアウト付き）"""
         uncertainty = self._evaluate_model_uncertainty(model_trace)
 
@@ -874,6 +888,79 @@ class IntegratedMLOpsPipeline:
         
         # アラート送信
         self.send_alert(error_info)
+
+    async def get_latest_features(self) -> Tuple[Dict, np.ndarray]:
+        """最新の特徴量とデータを取得するプレースホルダー"""
+        return {}, np.array([])
+
+    async def aggregate_hourly_data(self) -> Tuple[Dict, np.ndarray]:
+        """過去1時間のデータを集約するプレースホルダー"""
+        return {}, np.array([])
+
+    def predict_anomalies(self, features: Dict) -> List[Any]:
+        """簡易的な異常予測のプレースホルダー"""
+        if features:
+            first_key = next(iter(features))
+            return [0] * len(features[first_key])
+        return []
+
+    def record_metrics(self, metrics: Dict):
+        """メトリクスを履歴に追加するプレースホルダー"""
+        self.metrics_history.append(metrics)
+
+    async def monitor_performance(self):
+        """モデル性能監視のプレースホルダー"""
+        while True:
+            await asyncio.sleep(60)
+
+    async def health_check_loop(self):
+        """ヘルスチェックのプレースホルダー"""
+        while True:
+            await asyncio.sleep(300)
+
+    async def deploy_model(self, model: Any):
+        """モデルデプロイメントのプレースホルダー"""
+        pass
+
+    async def prepare_daily_data(self) -> Dict[str, Any]:
+        """日次データ準備のプレースホルダー"""
+        return {"features": {}, "dataframe": pd.DataFrame()}
+
+    async def prepare_weekly_data(self) -> Dict[str, Any]:
+        """週次データ準備のプレースホルダー"""
+        return {"features": {}, "dataframe": pd.DataFrame()}
+
+    async def update_architecture(self):
+        """モデルアーキテクチャ更新のプレースホルダー"""
+        pass
+
+    def evaluate_model_performance(self) -> Dict[str, float]:
+        """モデル性能評価のプレースホルダー"""
+        return {"improvement": 0.0}
+
+    def get_recent_anomalies(self, hours: int = 24) -> List[Any]:
+        """直近の異常イベントを取得するプレースホルダー"""
+        return []
+
+    def get_recent_normal_samples(self, hours: int = 24) -> List[Any]:
+        """直近の正常サンプルを取得するプレースホルダー"""
+        return []
+
+    def get_pipeline_state(self) -> Dict[str, Any]:
+        """パイプラインの状態情報を返すプレースホルダー"""
+        return {"buffer_size": len(self.data_collector.data_buffer)}
+
+    def cleanup_memory(self):
+        """メモリ解放処理のプレースホルダー"""
+        self.data_collector.data_buffer.clear()
+
+    def reset_connections(self):
+        """接続リセットのプレースホルダー"""
+        pass
+
+    def send_alert(self, info: Dict[str, Any]):
+        """アラート送信のプレースホルダー"""
+        print(f"[ALERT] {info}")
 
 # =====================================
 # 実行エントリーポイント
