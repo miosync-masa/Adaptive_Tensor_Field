@@ -25,6 +25,8 @@ from kubernetes import client, config
 import schedule
 import threading
 
+from policy_manager import PolicyManager
+
 # =====================================
 # 設定クラス
 # =====================================
