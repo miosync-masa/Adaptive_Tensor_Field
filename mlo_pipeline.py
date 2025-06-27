@@ -25,7 +25,11 @@ from kubernetes import client, config
 import schedule
 import threading
 
-from policy_manager import PolicyManager
+# =====================================
+# module呼び出し
+# =====================================
+from auto_minibatch import auto_minibatch
+from policy_manager import policy_manager
 
 # =====================================
 # 設定クラス
@@ -752,19 +756,15 @@ class IntegratedMLOpsPipeline:
 
     def on_security_event(self, event):
         # 1. ローカル即時適応
-        from auto_minibatch import auto_minibatch
-        from policy_manager import policy_manager
-       
         if hasattr(self, "kafka_producer"):
             producer = self.kafka_producer
         else:
-            from kafka import KafkaProducer
             self.kafka_producer = KafkaProducer(
                 bootstrap_servers=self.config.kafka_servers,
                 value_serializer=lambda v: json.dumps(v).encode('utf-8')
             )
             producer = self.kafka_producer
-
+    
         if event.is_anomaly():
             auto_minibatch.add_event(event)
             producer.send('anomaly-topic', event.to_json())
