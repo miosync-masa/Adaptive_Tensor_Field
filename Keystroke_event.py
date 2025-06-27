@@ -893,3 +893,24 @@ def example_usage():
 
 if __name__ == "__main__":
     example_usage()
+
+
+""""
+継続的認証
+pythoncontinuous_auth = ContinuousAuthenticationSystem(authenticator)
+# リアルタイムでキーストロークを監視
+result = continuous_auth.add_event(keystroke_event)
+
+セキュリティチェーンとの統合
+pythonenhanced_chain = KeystrokeEnhancedSecurityChain(chain_manager, keystroke_auth)
+result = enhanced_chain.process_event_with_keystroke(event, keystroke_events)
+
+２段階でのチェックレベル引き上げも可能
+result = enhanced_chain.process_event_with_keystroke(event, keystroke_events)
+if result['status'] in ['suspicious', 'critical']:
+    keystroke_result = authenticator.authenticate(user_id, recent_keystroke_events)
+    if keystroke_result['confidence'] < 0.5:
+        result['status'] = 'reject'
+        # ここで自動的に一時ブロック、アラート送信なども
+
+"""
