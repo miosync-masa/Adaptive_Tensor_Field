@@ -69,9 +69,20 @@ class OptimizedL3Config:
 # =====================================
 
 class EnhancedDataCollector:
-    """Lambda³特徴量を含む強化データ収集クラス"""
-    
-    def __init__(self, config: OptimizedL3Config):
+    """
+    Lambda³特徴量を含む強化データ収集クラス
+    ・即時免疫反応（異常時は自動でローカル学習・ブロードキャスト・EDR連携）
+    ・系列ごとバッファリング＋バッチ学習（Lambda³特徴量抽出）
+    ・柔軟な前処理パイプライン連携（send_to_preprocessing）
+    """
+    def __init__(
+        self,
+        config: OptimizedL3Config,
+        auto_minibatch=None,
+        kafka_producer=None,
+        policy_manager=None,
+        preprocessor=None
+    ):
         self.config = config
         self.kafka_consumer = KafkaConsumer(
             'security-events',
@@ -79,80 +90,122 @@ class EnhancedDataCollector:
             value_deserializer=lambda m: json.loads(m.decode('utf-8'))
         )
         self.data_buffer = []
-        self.series_data = {}  # 複数系列データの保存
-        
+        self.series_data = {}  # 系列ごとのイベントバッファ
+
+        # 外部連携系
+        self.auto_minibatch = auto_minibatch
+        self.kafka_producer = kafka_producer
+        self.policy_manager = policy_manager
+
+        # 前処理パイプラインの受け口（オプション）
+        self.preprocessor = preprocessor
+
+    def set_preprocessor(self, preprocessor):
+        """前処理パイプライン連携の後付け登録も可"""
+        self.preprocessor = preprocessor
+
     async def collect_security_events(self):
-        """セキュリティイベントの非同期収集"""
+        """セキュリティイベントの非同期収集＋即時免疫反応"""
         async for message in self.kafka_consumer:
             event = message.value
-            
-            # 系列ごとにデータを整理
+
+            # --- 1. 即時免疫反応 ---
+            if self._is_anomaly(event):
+                self._handle_immunity(event)
+
+            # --- 2. 系列ごとのバッファリング ---
             series_name = event.get('series', 'default')
-            if series_name not in self.series_data:
-                self.series_data[series_name] = []
-            
-            self.series_data[series_name].append(event)
+            self.series_data.setdefault(series_name, []).append(event)
             self.data_buffer.append(event)
-            
-            # バッファサイズチェック
+
+            # --- 3. バッチ学習の発火 ---
             if len(self.data_buffer) >= self.config.min_batch_size:
                 await self.process_batch()
-    
+
+    def _is_anomaly(self, event):
+        """イベントが異常かどうか判定（汎用：dict型・object型両対応）"""
+        if hasattr(event, "is_anomaly") and callable(event.is_anomaly):
+            return event.is_anomaly()
+        if isinstance(event, dict) and "anomaly" in event:
+            return event["anomaly"]
+        return False
+
+    def _handle_immunity(self, event):
+        """異常イベント時の即時免疫処理（並列発火OK）"""
+        # 1. ローカルミニバッチ学習
+        if self.auto_minibatch:
+            self.auto_minibatch.add_event(event)
+        # 2. 即時Kafkaブロードキャスト
+        if self.kafka_producer:
+            self.kafka_producer.send('anomaly-topic', json.dumps(event).encode())
+        # 3. ポリシー／EDRアップデート
+        if self.policy_manager:
+            self.policy_manager.update_defense(event)
+
     async def process_batch(self):
-        """バッチ処理とLambda³特徴量抽出"""
+        """系列バッファのバッチ処理・Lambda³特徴量抽出・前処理送信"""
         if not self.data_buffer:
             return
-        
-        # 各系列のLambda³特徴量を計算
+
         features_by_series = {}
         for series_name, series_events in self.series_data.items():
             if len(series_events) > 10:
-                # 時系列データの抽出
                 values = np.array([e['value'] for e in series_events])
-                timestamps = np.array([e['timestamp'] for e in series_events])
-                
-                # Lambda³特徴量の計算
                 features = self.calc_lambda3_features(values)
                 features_by_series[series_name] = features
-        
-        # 前処理パイプラインに送信
+
+        # 前処理パイプラインへ渡す（非同期/バッファ式）
         await self.send_to_preprocessing(features_by_series)
-        
+
         # バッファクリア
-        self.data_buffer = []
-    
+        self.data_buffer.clear()
+        # series_data側は必要に応じて都度クリアor伸ばす
+        # self.series_data[series_name] = []  # 必要なら各系列で切ってもよい
+
+    async def send_to_preprocessing(self, features_by_series):
+        """Lambda³特徴量バッチを前処理パイプラインへ非同期送信"""
+        if self.preprocessor:
+            # 受け口がasync/await型なら
+            if hasattr(self.preprocessor, 'receive_features'):
+                await self.preprocessor.receive_features(features_by_series)
+            else:
+                # 非同期でない場合（例：直列パイプラインの場合は同期呼び出しでもOK）
+                self.preprocessor.receive_features(features_by_series)
+        else:
+            print("[WARN] Preprocessor未登録: features未送信")
+
     def calc_lambda3_features(self, data: np.ndarray) -> Dict[str, np.ndarray]:
-        """Lambda³特徴量の計算"""
+        """Lambda³特徴量の計算（系列単位で呼び出し）"""
         n = len(data)
         diff = np.diff(data, prepend=data[0])
         threshold = np.percentile(np.abs(diff), self.config.delta_percentile)
-        
+
         # ジャンプ検出
         delta_LambdaC_pos = (diff > threshold).astype(np.float32)
         delta_LambdaC_neg = (diff < -threshold).astype(np.float32)
-        
+
         # ローカル標準偏差
         window = self.config.local_window
         padded_data = np.pad(data, (window, window), mode='edge')
         local_std = np.array([
-            np.std(padded_data[i:i+2*window+1])
+            np.std(padded_data[i:i + 2 * window + 1])
             for i in range(n)
         ])
-        
-        # ローカルジャンプ検出
+
+        # ローカルジャンプ
         score = np.abs(diff) / (local_std + 1e-8)
         local_threshold = np.percentile(score, self.config.local_jump_percentile)
         local_jump_detect = (score > local_threshold).astype(np.float32)
-        
+
         # 時間窓標準偏差
         rho_T = np.array([
-            np.std(data[max(0, i-self.config.window):i+1])
+            np.std(data[max(0, i - self.config.window):i + 1])
             for i in range(n)
         ])
-        
+
         # 時間トレンド
         time_trend = np.arange(n, dtype=np.float32) / n
-        
+
         return {
             'delta_LambdaC_pos': delta_LambdaC_pos,
             'delta_LambdaC_neg': delta_LambdaC_neg,
@@ -694,6 +747,26 @@ class IntegratedMLOpsPipeline:
         
         # アーキテクチャ更新
         await self.update_architecture()
+
+    def on_security_event(self, event):
+        # 1. ローカル即時適応
+        from auto_minibatch import auto_minibatch
+        from policy_manager import policy_manager
+       
+        if hasattr(self, "kafka_producer"):
+            producer = self.kafka_producer
+        else:
+            from kafka import KafkaProducer
+            self.kafka_producer = KafkaProducer(
+                bootstrap_servers=self.config.kafka_servers,
+                value_serializer=lambda v: json.dumps(v).encode('utf-8')
+            )
+            producer = self.kafka_producer
+
+        if event.is_anomaly():
+            auto_minibatch.add_event(event)
+            producer.send('anomaly-topic', event.to_json())
+            policy_manager.update_defense(event)
     
     def handle_pipeline_error(self, error: Exception):
         """エラーハンドリング"""
