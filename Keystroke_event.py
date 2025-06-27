@@ -905,12 +905,13 @@ result = continuous_auth.add_event(keystroke_event)
 pythonenhanced_chain = KeystrokeEnhancedSecurityChain(chain_manager, keystroke_auth)
 result = enhanced_chain.process_event_with_keystroke(event, keystroke_events)
 
-２段階でのチェックレベル引き上げも可能
+#　🛡️**“通常時は緩やか、怪しい時だけ厳密認証”**
+#　普段は警戒度低く、警告フラグ時に「真面目判定モード」へ！
+#　２段階でのチェックレベル引き上げも可能
 result = enhanced_chain.process_event_with_keystroke(event, keystroke_events)
 if result['status'] in ['suspicious', 'critical']:
     keystroke_result = authenticator.authenticate(user_id, recent_keystroke_events)
     if keystroke_result['confidence'] < 0.5:
         result['status'] = 'reject'
         # ここで自動的に一時ブロック、アラート送信なども
-
 """
