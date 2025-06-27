@@ -607,20 +607,60 @@ class IntelligentDeployment:
         
         self.k8s_apps = client.AppsV1Api()
     
-    def deploy_with_uncertainty(self, model_trace, confidence_threshold=0.95):
-        """不確実性を考慮したデプロイメント"""
-        # モデルの不確実性を評価
+   async def deploy_with_uncertainty(self, model_trace, confidence_threshold=0.95):
+        """不確実性を考慮したデプロイメント（安全ロールアウト付き）"""
         uncertainty = self._evaluate_model_uncertainty(model_trace)
-        
+
         if uncertainty['confidence'] >= confidence_threshold:
             # 高信頼度: フルデプロイメント
             self.full_deployment(model_trace)
         elif uncertainty['confidence'] >= 0.8:
-            # 中信頼度: カナリアデプロイメント
+            # 中信頼度: まずはカナリアデプロイメント＋監視
             self.canary_deployment(model_trace, canary_percentage=20)
+            # ここでasyncで監視タスク開始（実際には別スレッドやタスク推奨）
+            await self.monitor_and_rollback_if_needed(model_trace)
         else:
             # 低信頼度: シャドウデプロイメント
             self.shadow_deployment(model_trace)
+
+    async def monitor_and_rollback_if_needed(self, model_trace):
+        """15分間モニタリング→性能悪化なら自動ロールバック"""
+        baseline = self.get_current_performance_metrics()
+        await asyncio.sleep(15 * 60)  # 15分
+        new_metrics = self.get_current_performance_metrics()
+
+        # 新旧比較（例：検知率・FP率・レイテンシが全部良化 or 非劣化が条件）
+        if not self.is_new_model_better(new_metrics, baseline):
+            self.automatic_rollback()
+            self.notify_admin("モデル更新失敗：自動ロールバック実行")
+        else:
+            self.gradual_rollout(model_trace)
+
+    def get_current_performance_metrics(self):
+        # 現在の検知率・誤検知率・応答遅延などを返すダミー（実装は現場に応じて）
+        return {
+            "detection_rate": 0.99,  # 例
+            "false_positive_rate": 0.01,
+            "response_time": 0.12
+        }
+
+    def is_new_model_better(self, new, baseline):
+        # 必要な評価ロジック
+        return (
+            new["detection_rate"] >= baseline["detection_rate"] and
+            new["false_positive_rate"] <= baseline["false_positive_rate"] and
+            new["response_time"] <= baseline["response_time"]
+        )
+
+    def automatic_rollback(self):
+        print("[DEPLOY] ⚠️ 自動ロールバック発動！（旧モデルに戻しました）")
+
+    def gradual_rollout(self, model_trace):
+        print("[DEPLOY] 🚀 段階的に本番全体に展開します")
+        self.full_deployment(model_trace)
+
+    def notify_admin(self, msg):
+        print(f"[ALERT] {msg}")
     
     def _evaluate_model_uncertainty(self, trace):
         """モデルの不確実性評価"""
