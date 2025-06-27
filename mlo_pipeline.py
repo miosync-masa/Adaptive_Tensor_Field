@@ -30,8 +30,7 @@ import threading
 # =====================================
 from auto_minibatch import AdaptiveMiniBatchKMeans
 from policy_manager import PolicyManager
-from diversity_adversarial_defense 
-import AdversarialDefense, DiversityAwareCluster, PolicyManager as AdvPolicyManager
+from diversity_adversarial_defense import AdversarialDefense, DiversityAwareCluster, PolicyManager as AdvPolicyManager
 
 # グローバルインスタンス
 auto_minibatch = AdaptiveMiniBatchKMeans()
