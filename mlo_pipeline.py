@@ -28,9 +28,14 @@ import threading
 # =====================================
 # module呼び出し
 # =====================================
-from auto_minibatch import auto_minibatch
-from policy_manager import policy_manager
-from diversity_adversarial_defense import AdversarialDefense, DiversityAwareCluster, PolicyManager as AdvPolicyManager
+from auto_minibatch import AdaptiveMiniBatchKMeans
+from policy_manager import PolicyManager
+from diversity_adversarial_defense 
+import AdversarialDefense, DiversityAwareCluster, PolicyManager as AdvPolicyManager
+
+# グローバルインスタンス
+auto_minibatch = AdaptiveMiniBatchKMeans()
+policy_manager = PolicyManager()
 
 # =====================================
 # 設定クラス
@@ -75,7 +80,7 @@ class OptimizedL3Config:
 # 0. 多様性＆敵対的防御モジュール（AdversarialDefense等）
 # =====================================
 
-class AdversarialDefense:
+class SimpleAdversarialDefense:
     def __init__(self, normal_samples=None, event_buffer=None):
         self.normal_samples = normal_samples or []
         self.event_buffer = event_buffer or []
@@ -118,9 +123,9 @@ class EnhancedDataCollector:
         self.series_data = {}  # 系列ごとのイベントバッファ
 
         # 外部連携系
-        self.auto_minibatch = auto_minibatch
+        self.auto_minibatch = auto_minibatch or globals().get("auto_minibatch")
         self.kafka_producer = kafka_producer
-        self.policy_manager = policy_manager
+        self.policy_manager = policy_manager or globals().get("policy_manager")
 
         # 前処理パイプラインの受け口（オプション）
         self.preprocessor = preprocessor
@@ -589,9 +594,9 @@ class BayesianABTesting:
 
 class IntelligentDeployment:
     """ベイズ推論結果を活用したデプロイメント"""
-    
-    def __init__(self, config: OptimizedL3Config):
-        self.config = config
+
+    def __init__(self, cfg: OptimizedL3Config):
+        self.config = cfg
         self.deployment_history = []
         
         # Kubernetes設定
@@ -663,6 +668,7 @@ class IntegratedMLOpsPipeline:
         self.trainer = HierarchicalBayesianTrainer(config)
         self.ab_tester = BayesianABTesting(config)
         self.deployer = IntelligentDeployment(config)
+        self.diversity_cluster = DiversityAwareCluster()
         
         # メトリクス記録
         self.metrics_history = []
