@@ -969,7 +969,7 @@ class IntegratedMLOpsPipeline:
 async def main():
     """メイン実行関数"""
     # 設定の初期化
-    config = OptimizedL3Config(
+    pipeline_config = OptimizedL3Config(
         draws=500,
         tune=200,
         chains=2,
@@ -980,11 +980,13 @@ async def main():
     )
     
     # パイプラインの起動
-    pipeline = IntegratedMLOpsPipeline(config)
+    pipeline = IntegratedMLOpsPipeline(pipeline_config)
     
     print("🚀 統合MLOps + Lambda³ベイズ推論パイプライン起動")
-    print(f"設定: JAX={config.use_jax}, Draws={config.draws}, Chains={config.chains}")
-    
+    print(
+        f"設定: JAX={pipeline_config.use_jax}, "
+        f"Draws={pipeline_config.draws}, Chains={pipeline_config.chains}"
+    )
     # 非同期実行
     await pipeline.run_pipeline()
 
