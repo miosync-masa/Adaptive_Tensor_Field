@@ -95,18 +95,21 @@ class PolicyManager:
 # ---------------------------
 # 4. 実行例（現場業務多様性＋敵対的学習フロー）
 # ---------------------------
-
+"""
 def main():
     # (1) 業務“正常サンプル”用意
     normal_samples = [
         {"user_id": "taro", "operation": "FileRead", "score": 0.1, "dept": "sales"},
-        {"user_id": "taro", "operation": "FileWrite", "score": 0.15, "dept": "sales"},
-        {"user_id": "hanako", "operation": "Login", "score": 0.05, "dept": "hr"},
-        # ...その他業務多様性サンプル...
+        # normal_samples:
+        # ATフィールド過去ログ（正常判定Chainイベント）から特徴量ベクトル化して抽出した
+        # 「通常業務パターン多様性ワクチン」用データ
     ]
 
     # (2) 敵対的攻撃サンプル
     detected_attack = {"user_id": "evil", "operation": "FileDelete", "score": 0.98, "dept": "sales"}
+    # detected_attack:
+    # ATフィールド（ゼロトラスト防御層）のリアルタイム検知ログから
+    # 「攻撃」または「異常」と判定されたチェーンイベント（特徴量ベクトル化済み）
 
     # (3) 敵対的変種＋誤検知ワクチン強化
     adv_def = AdversarialDefense(normal_samples)
@@ -133,5 +136,6 @@ def main():
         conf = 1.0 - sample["score"]
         policy.update_defense(sample, confidence=conf)
 
-  #if __name__ == "__main__":
-  #  main()
+  if __name__ == "__main__":
+    main()
+"""
