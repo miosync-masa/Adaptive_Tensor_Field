@@ -30,6 +30,7 @@ import threading
 # =====================================
 from auto_minibatch import auto_minibatch
 from policy_manager import policy_manager
+from diversity_adversarial_defense import AdversarialDefense, DiversityAwareCluster, PolicyManager as AdvPolicyManager
 
 # =====================================
 # 設定クラス
@@ -69,6 +70,24 @@ class OptimizedL3Config:
             self.kafka_servers = ['localhost:9092']
         if self.threat_intel_apis is None:
             self.threat_intel_apis = []
+
+# =====================================
+# 0. 多様性＆敵対的防御モジュール（AdversarialDefense等）
+# =====================================
+
+class AdversarialDefense:
+    def __init__(self, normal_samples=None, event_buffer=None):
+        self.normal_samples = normal_samples or []
+        self.event_buffer = event_buffer or []
+
+    def get_recent_anomalies(self):
+        """
+        (参考実装) メモリ上のイベントバッファから抽出
+        本番運用はDB,ログAPI等で好きに書き換えOK
+        """
+        return [ev for ev in self.event_buffer if ev.get("is_anomaly", False)]
+
+    # 他にもgenerate_attack_variations, train_against_variants...など追加
 
 # =====================================
 # 1. データ収集モジュール（Lambda³統合）
@@ -721,17 +740,34 @@ class IntegratedMLOpsPipeline:
                     await self.deploy_model(new_model)
     
     async def daily_cycle(self):
-        """日次サイクル: 階層ベイズ学習"""
-        # 日次データの準備
-        daily_data = await self.prepare_daily_data()
+        """日次サイクル: 階層ベイズ学習＋敵対的多様性進化"""
+        # 直近24h異常＆正常サンプルの抽出
+        recent_anomalies = self.get_recent_anomalies(hours=24)
+        normal_samples = self.get_recent_normal_samples(hours=24)
+    
+        adv_variants = []
+        if recent_anomalies and normal_samples:
+            adv_def = AdversarialDefense(normal_samples)
+            for atk in recent_anomalies:
+                adv_variants += adv_def.generate_attack_variations(atk, n_variations=20)
+            # 多様性クラスタに反映
+            for ns in normal_samples:
+                self.diversity_cluster.add_sample(ns["user_id"], ns, np.array([ns["score"]]))
+            for av in adv_variants:
+                self.diversity_cluster.add_sample(av["user_id"], av, np.array([av["score"]]))
+            # 必要ならrecluster
+            for user in set([e["user_id"] for e in normal_samples + adv_variants]):
+                if self.diversity_cluster.need_recluster(user):
+                    self.diversity_cluster.recluster(user)
+            # ※↓学習用データに変種・正常を追加する場合はここでdaily_dataにappendする
         
-        # Layer 3: 階層ベイズ
+        # ---日次学習---
+        daily_data = await self.prepare_daily_data()
+        # ここでadv_variants等も含めて「1日分の学習データ」としてdaily_data['dataframe']に
         self.trainer.train_deep_layer(
             daily_data['features'],
             daily_data['dataframe']
         )
-        
-        # モデル評価とデプロイメント判定
         evaluation = self.evaluate_model_performance()
         if evaluation['improvement'] > 0.05:
             model_trace = self.trainer.models['layer3_deep'][1]
@@ -739,7 +775,7 @@ class IntegratedMLOpsPipeline:
                 model_trace,
                 confidence_threshold=0.9
             )
-    
+                
     async def weekly_cycle(self):
         """週次サイクル: モデル構造の進化"""
         # 週次データ集約
