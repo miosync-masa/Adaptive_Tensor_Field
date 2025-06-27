@@ -5,6 +5,7 @@
 # 標準ライブラリ
 import os
 import sys
+import types
 import json
 import time
 import random
@@ -65,8 +66,8 @@ class ChainTuneConfig:
     threshold_investigating_user: float = 10.0  # 個人：investigating判定しきい値（※追加）
     trust_error_threshold_org: float = 0.5      # 組織：信頼スコアでcritical
     trust_error_threshold_user: float = 0.65    # 個人：信頼スコアでcritical
-    threshold_div_suspicious : float = 14.0
-    threshold_div_crittcal : float = 25.0
+    threshold_div_suspicious : float = 14.0 
+    threshold_div_critical : float = 25.0
 
     # === Divergence×信頼スコアの組み合わせによる追加判定 ===
     trust_score_investigating_1: float = 0.65   # investigating判定その1（信頼スコア）
@@ -394,6 +395,10 @@ HIGH_RISK_PATHS = [
     "\\audit\\", "\\backup\\", "\\system32\\"
 ]
 
+# --- 19. 機密パスリスト ---
+# Paths containing sensitive information
+SENSITIVE_PATHS = [p for (p, _) in PATH_SCORES['sensitive']]
+
 # --- 20. 部署ごとのIPレンジ ---
 DEPT_IP_RANGES = {
     "sales": "192.168.1.",
@@ -490,7 +495,7 @@ TRUST_SCORE_INVESTIGATING_2 = CONFIG.trust_score_investigating_2
 NORMAL_DIV_INVESTIGATING_1 = CONFIG.normal_div_investigating_1
 NORMAL_DIV_INVESTIGATING_2 = CONFIG.normal_div_investigating_2
 THRESHOLD_DIV_SUSPICIOUS = CONFIG.threshold_div_suspicious
-THRESHOLD_DIV_CRITTCAL = CONFIG.threshold_div_crittcal
+THRESHOLD_DIV_CRITICAL = CONFIG.threshold_div_critical
 
 # -----------------
 # 🔐 Security Log Data Handler
@@ -1555,7 +1560,7 @@ def classify_security_mode_auto(
     # このあとのブロックでは、"統一された名前"を使う
     if trust_score < trust_error_threshold:
         mode = "critical"
-    elif divergence > THRESHOLD_DIV_CRITTCAL:
+    elif divergence > THRESHOLD_DIV_CRITICAL:
         mode = "critical"
     elif weighted_score > threshold_suspicious:
         mode = "suspicious"
@@ -4759,3 +4764,4 @@ if __name__ == "__main__":
     print(f"イベント数: {len(benchmark_events)}")
     print(f"処理時間: {elapsed:.3f} 秒")
     print(f"スループット: {throughput:.1f} events/sec")
+    
