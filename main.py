@@ -2057,7 +2057,6 @@ class SecurityBlock:
 
 def add_block(self, data, state_params, divergence, metadata=None, fork_threshold=None):
     prev_block = self.blocks[-1] if self.blocks else None
-    event_hash = ScalableSecurityChain.compute_event_hash(event)
     new_block = SecurityBlock(
         index=len(self.blocks),
         data=data,
