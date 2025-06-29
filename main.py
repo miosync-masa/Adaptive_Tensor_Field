@@ -2055,10 +2055,13 @@ class SecurityBlock:
     def verify(self):
         return self.hash == self.hashing()
 
-def add_block(self, data, state_params, divergence, metadata=None, fork_threshold=None):
-    prev_block = self.blocks[-1] if self.blocks else None
+# 修正版 add_block 関数
+def add_block(chain, data, state_params, divergence, metadata=None, fork_threshold=None):
+    """修正版: chainを第一引数として受け取る"""
+    prev_block = chain.blocks[-1] if chain.blocks else None
+    
     new_block = SecurityBlock(
-        index=len(self.blocks),
+        index=len(chain.blocks),
         data=data,
         previous_hash=prev_block.hash if prev_block else "0"*64,
         state_params=state_params,
@@ -2068,25 +2071,31 @@ def add_block(self, data, state_params, divergence, metadata=None, fork_threshol
 
     # --- フォーク判定 ---
     prev_vector = prev_block.state_params.get("vector") if prev_block else None
-    new_vector  = state_params.get("vector")
+    new_vector = state_params.get("vector")
     forked = False
+    
     # 🌟個人/組織ごと自動切替
-    if fork_threshold is None and hasattr(self, 'tune_conf'):
-        if hasattr(self, 'user_id'):  # UserSecurityChain判定
-            fork_threshold = getattr(self.tune_conf, 'fork_threshold_user', 12.0)
+    if fork_threshold is None and hasattr(chain, 'tune_conf'):
+        if hasattr(chain, 'user_id'):  # UserSecurityChain判定
+            fork_threshold = getattr(chain.tune_conf, 'fork_threshold_user', 12.0)
         else:  # 組織
-            fork_threshold = getattr(self.tune_conf, 'fork_threshold_org', 15.0)
-        if prev_vector is not None and new_vector is not None and fork_threshold:
-            diff = np.linalg.norm(np.array(new_vector) - np.array(prev_vector))
-            if diff > fork_threshold:
-                forked = True
-                new_block.metadata["forked"] = True
-                alert_fork(self, prev_block, new_block)
-            else:
-                new_block.metadata["forked"] = False
+            fork_threshold = getattr(chain.tune_conf, 'fork_threshold_org', 15.0)
+    
+    if prev_vector is not None and new_vector is not None and fork_threshold:
+        diff = np.linalg.norm(np.array(new_vector) - np.array(prev_vector))
+        if diff > fork_threshold:
+            forked = True
+            new_block.metadata["forked"] = True
+            alert_fork(chain, prev_block, new_block)
         else:
-            self.blocks.append(new_block)
             new_block.metadata["forked"] = False
+    else:
+        new_block.metadata["forked"] = False
+    
+    # ブロックをチェーンに追加
+    chain.blocks.append(new_block)
+    
+    return new_block
 
 def alert_fork(chain, prev_block, new_block, threshold=12.0):
     """
